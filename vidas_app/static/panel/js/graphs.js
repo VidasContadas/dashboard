@@ -14,20 +14,22 @@ var numByEdad;
 var numBySuceso;
 var numBySexo;
 
+var personaActiva = "";
+
 $(document).ready(function(){
 
 	
 	$("body").on('click', '.list-person', function(){		
 		var surname =  $(this).find(".surname").text();
-		var active ="";
 
 		if($(this).hasClass("active")){
 			console.log("deselect name");
+			personaActiva ="";
 			apellidoDim.filterAll();
 		} else{
 			
 			console.log("Filtrando: "+surname);
-			active = surname;		
+			personaActiva = surname;		
 			apellidoDim.filterFunction(function(d){
 				if (d == surname){					
 					return d;
@@ -40,7 +42,7 @@ $(document).ready(function(){
 		numBySuceso.reduceCount();
 		numBySexo.reduceCount();
 
-		updateRecords(apellidoDim, active);
+		updateRecords(apellidoDim);
 		
 		dc.redrawAll();
 		
@@ -53,10 +55,10 @@ $(document).ready(function(){
 
 
 
-function updateRecords(dim, active){
+function updateRecords(dim){
 	var rowCode = '<tr class="list-person"><td class="surname">##surname##</td><td class="name">##name##</td><td class="alias">##alias##</td></tr>';
 
-	allRecords = dim.bottom(100);
+	allRecords = dim.bottom(10);
 
 	var table = $("#list-table");
 
@@ -67,7 +69,7 @@ function updateRecords(dim, active){
 		var personCode = personCode.replace("##surname##", allRecords[i].Apelidos);
 		var personCode = personCode.replace("##alias##", allRecords[i].Apodo);
 		var newRow = $(personCode);		
-		if (allRecords[i].Apelidos == active){
+		if (allRecords[i].Apelidos == personaActiva){
 			$(newRow).addClass("active");
 		}
 		$(table).append(newRow);

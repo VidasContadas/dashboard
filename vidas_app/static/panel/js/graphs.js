@@ -3,6 +3,7 @@ console.log("STATIC_URL = "+STATIC_URL);
 
 queue()
     .defer(d3.json, STATIC_URL+"panel/data/data_2_min_2.json")
+    .defer(d3.json, STATIC_URL+"panel/geojson/provincias.geojson")
     .await(makeGraphs);
 
 var allRecords;
@@ -13,6 +14,7 @@ var apellidoDim;
 var numByEdad;
 var numBySuceso;
 var numBySexo;
+var numByProvincia;
 
 var personaActiva = "";
 
@@ -41,6 +43,7 @@ $(document).ready(function(){
 		numByEdad.reduceCount();
 		numBySuceso.reduceCount();
 		numBySexo.reduceCount();
+		numByProvincia.reduceCount();
 
 		updateRecords(apellidoDim);
 		
@@ -78,13 +81,14 @@ function updateRecords(dim){
 
 }
 
-function makeGraphs(error, articulosJson) {
+function makeGraphs(error, articulosJson, galiciaJson) {
 	
 	console.log( Object.keys(articulosJson[0]));
 	var twentysixers = 0;
 	//Clean data
 	for (var i = 0; i < articulosJson.length; i++){
 		d = articulosJson[i];
+
 
 		d['Sexo'].trim();
 
@@ -162,12 +166,14 @@ function makeGraphs(error, articulosJson) {
 	});
 
 	apellidoDim = ndx.dimension(function(d){ return d["Apelidos"]});
+	provinciaDim = ndx.dimension(function(d){ return d["NaturalProvincia"]});
 
 
 
 	numBySexo = sexoDim.group();
 	numBySuceso = sucesoDim.group();
 	numByEdad = edadDim.group();
+	numByProvincia = provinciaDim.group();
 
 
 	var all = ndx.groupAll();
@@ -177,7 +183,8 @@ function makeGraphs(error, articulosJson) {
     //Charts
 	var sucesosRowChart = dc.rowChart("#sucesos-bar-chart");
 	var sexoPieChart = dc.pieChart("#sexo-pie-chart");
-	var edadBarChart = dc.barChart("#edad-chart")
+	var edadBarChart = dc.barChart("#edad-chart");
+	var mapChart = dc.geoChoroplethChart("#map-chart");
 
 
 	//Get the minimum non-0 age
@@ -193,7 +200,18 @@ function makeGraphs(error, articulosJson) {
 	var maxEdad = edadDim.top(1)[0]["Idade"];
 	maxEdad++;
 
+	var provinciasByNum = numByProvincia.top(Infinity);
+	var maxProvincia = provinciasByNum[0].value;
+	var minProvincia = provinciasByNum.slice(-1)[0].value;
+	console.log("min-max provincias: "+minProvincia+" - " +maxProvincia);
 
+
+    var projection = d3.geo.conicConformal().center([-3, 40]);;
+   		projection = d3.geo.conicConformal()
+  					.center([0, 42])
+  					.scale(10000)
+  					.translate([1125,300]);
+   		
 	edadBarChart
 		.width(1000)
 		.height(160)
@@ -236,6 +254,26 @@ function makeGraphs(error, articulosJson) {
 			updateRecords(apellidoDim);			
 		});
 
+	mapChart.width(1000)
+	    .height(330)
+	    .dimension(provinciaDim)
+	    .group(numByProvincia)
+	   	.colors(d3.scale.quantize().range(["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF", "#1E96FF", "#0089FF", "#0061B5"]))
+        .colorDomain([0, maxProvincia])
+	    .overlayGeoJson(galiciaJson["features"], "NaturalProvincia", function (d) {
+	        return d.properties["name_2"];
+	    })
+	    
+	    .projection(projection)
+	    .title(function (p) {
+	        return "NaturalProvincia: " + p["key"]
+	                + "\n"
+      	
+	    })
+		.on("filtered", function (){
+			updateRecords(apellidoDim);			
+		})
+	    
     dc.renderAll();
 
 };

@@ -1,39 +1,40 @@
-console.log("graphs.js loaded");
-console.log("STATIC_URL = "+STATIC_URL);
-
 queue()
-    .defer(d3.json, STATIC_URL+"panel/data/data_2_min_2.json")
-    .defer(d3.json, STATIC_URL+"panel/geojson/provincias.geojson")
+    .defer(d3.json, STATIC_URL+"panel/data/data_3000.json")
+    .defer(d3.json, STATIC_URL+"panel/geojson/galicia.json")
     .await(makeGraphs);
 
 var allRecords;
 var ndx;
-var apellidoDim;
+var idDim;
 
 //Grupos
 var numByEdad;
 var numBySuceso;
 var numBySexo;
-var numByProvincia;
+var numByConcejo;
 
-var personaActiva = "";
+//Charts
+var mapChart;
+
+var personaActiva = -1;
+var maxConcejo = 0;
+
 
 $(document).ready(function(){
 
 	
 	$("body").on('click', '.list-person', function(){		
-		var surname =  $(this).find(".surname").text();
-
+		
 		if($(this).hasClass("active")){
-			console.log("deselect name");
-			personaActiva ="";
-			apellidoDim.filterAll();
-		} else{
-			
-			console.log("Filtrando: "+surname);
-			personaActiva = surname;		
-			apellidoDim.filterFunction(function(d){
-				if (d == surname){					
+			//Deselect person
+			personaActiva = -1;
+			idDim.filterAll();
+		} else{			
+			//Select person
+			var id =  $(this).attr("data-id");
+			personaActiva = id;		
+			idDim.filterFunction(function(d){
+				if (d == id){					
 					return d;
 				}
 			});			
@@ -43,12 +44,11 @@ $(document).ready(function(){
 		numByEdad.reduceCount();
 		numBySuceso.reduceCount();
 		numBySexo.reduceCount();
-		numByProvincia.reduceCount();
+		numByConcejo.reduceCount();
 
-		updateRecords(apellidoDim);
+		updateRecords(idDim);
 		
 		dc.redrawAll();
-		
 		
 	});
 
@@ -59,9 +59,19 @@ $(document).ready(function(){
 
 
 function updateRecords(dim){
-	var rowCode = '<tr class="list-person"><td class="surname">##surname##</td><td class="name">##name##</td><td class="alias">##alias##</td></tr>';
+	var rowCode = '<tr class="list-person" data-id="##id##"><td class="surname">##surname##</td><td class="name">##name##</td><td class="alias">##alias##</td></tr>';
 
-	allRecords = dim.bottom(10);
+
+	maxConcejo = concejoDim.group().top(1)[0].value;
+	if (mapChart !== undefined){
+		mapChart.colorDomain([0, maxConcejo]);
+	console.log("max concejo:" +maxConcejo);
+	}
+	
+
+	dc.redrawAll();
+
+	allRecords = dim.bottom(5);
 
 	var table = $("#list-table");
 
@@ -71,8 +81,9 @@ function updateRecords(dim){
 		var personCode = rowCode.replace("##name##", allRecords[i].Nome);
 		var personCode = personCode.replace("##surname##", allRecords[i].Apelidos);
 		var personCode = personCode.replace("##alias##", allRecords[i].Apodo);
+		var personCode = personCode.replace("##id##", allRecords[i].id);
 		var newRow = $(personCode);		
-		if (allRecords[i].Apelidos == personaActiva){
+		if (allRecords[i].id == personaActiva){
 			$(newRow).addClass("active");
 		}
 		$(table).append(newRow);
@@ -81,14 +92,12 @@ function updateRecords(dim){
 
 }
 
-function makeGraphs(error, articulosJson, galiciaJson) {
-	
-	console.log( Object.keys(articulosJson[0]));
-	var twentysixers = 0;
+function cleanData(datos){
 	//Clean data
-	for (var i = 0; i < articulosJson.length; i++){
-		d = articulosJson[i];
+	for (var i = 0; i < datos.length; i++){
+		d = datos[i];
 
+		d['id'] = i+1; //add id to every entry. +1 because starting with 0 made the first one not to work.
 
 		d['Sexo'].trim();
 
@@ -104,35 +113,21 @@ function makeGraphs(error, articulosJson, galiciaJson) {
 			default:
 				console.log("Posible fallo de datos (Sexo), se eliminará esta entrada:");
 				console.log(d);
-				articulosJson.splice(i,1);
+				datos.splice(i,1);
 				break;
 		}
 
 		d['Suceso'].trim();
 
 		switch (d['Suceso']){
-			case 'Desaparici?':
-				d['Suceso'] = "Desaparición";
-				break;
 
-			case 'Detenci?':
-				d['Suceso'] = "Detención";
-				break;
-
-			case 'Desaparici?':
-				d['Suceso'] = "Desaparición";
-				break;
-
-			case 'Morte (outras tipolox?s)':
+			case 'Morte (outras tipoloxías)':
 				d['Suceso'] = "Muerte (otras tipologías)";
 				break;
 
-			case 'Outras tipolox?s represivas':
+			case 'Outras tipoloxías represivas':
 				d['Suceso'] = "Otras tipologías represivas";
 				break;
-
-			case 'Sanci?':
-				d['Suceso'] = "Sanción";
 
 			default:
 				break;
@@ -141,8 +136,19 @@ function makeGraphs(error, articulosJson, galiciaJson) {
 		d['Apelidos'] = toTitleCase(d['Apelidos']);
 	}
 
+	return datos;
+
+}
+
+function makeGraphs(error, datos, galiciaJson) {
+	
+	console.log( Object.keys(datos[0]));
+	var twentysixers = 0;
+	
+	datos = cleanData(datos);
+
 	//Create a Crossfilter instance
-	ndx = crossfilter(articulosJson);
+	ndx = crossfilter(datos);
 
 
 	//Define Dimensions
@@ -165,26 +171,26 @@ function makeGraphs(error, articulosJson, galiciaJson) {
 		//}
 	});
 
-	apellidoDim = ndx.dimension(function(d){ return d["Apelidos"]});
-	provinciaDim = ndx.dimension(function(d){ return d["NaturalProvincia"]});
+	idDim = ndx.dimension(function(d){ return d["id"]});
+	concejoDim = ndx.dimension(function(d){ return d["NaturalConcello"]});
 
 
 
 	numBySexo = sexoDim.group();
 	numBySuceso = sucesoDim.group();
 	numByEdad = edadDim.group();
-	numByProvincia = provinciaDim.group();
+	numByConcejo = concejoDim.group();
 
 
 	var all = ndx.groupAll();
 
-	updateRecords(apellidoDim);
+	updateRecords(idDim);
 
     //Charts
 	var sucesosRowChart = dc.rowChart("#sucesos-bar-chart");
 	var sexoPieChart = dc.pieChart("#sexo-pie-chart");
 	var edadBarChart = dc.barChart("#edad-chart");
-	var mapChart = dc.geoChoroplethChart("#map-chart");
+	mapChart = dc.geoChoroplethChart("#map-chart");
 
 
 	//Get the minimum non-0 age
@@ -200,10 +206,10 @@ function makeGraphs(error, articulosJson, galiciaJson) {
 	var maxEdad = edadDim.top(1)[0]["Idade"];
 	maxEdad++;
 
-	var provinciasByNum = numByProvincia.top(Infinity);
-	var maxProvincia = provinciasByNum[0].value;
-	var minProvincia = provinciasByNum.slice(-1)[0].value;
-	console.log("min-max provincias: "+minProvincia+" - " +maxProvincia);
+	var concejoByNum = numByConcejo.top(Infinity);
+	maxConcejo = concejoDim.group().top(1)[0].value
+	var minConcejo = concejoByNum.slice(-1)[0].value;
+	console.log("min-max concejo: "+minConcejo+" - " +maxConcejo);
 
 
     var projection = d3.geo.conicConformal().center([-3, 40]);;
@@ -224,7 +230,7 @@ function makeGraphs(error, articulosJson, galiciaJson) {
 		.renderLabel(true)	
 		.xAxisLabel("Year")
 		.on("filtered", function (){
-			updateRecords(apellidoDim);			
+			updateRecords(idDim);			
 		})
 		.yAxis().ticks(4);	
 
@@ -238,7 +244,7 @@ function makeGraphs(error, articulosJson, galiciaJson) {
         .elasticX(true)	
         .othersGrouper(false) //Removes "Other" from the list
         .on("filtered", function (){
-			updateRecords(apellidoDim);			
+			updateRecords(idDim);			
 		})
         .xAxis().ticks(4);
 
@@ -251,27 +257,37 @@ function makeGraphs(error, articulosJson, galiciaJson) {
 	    .group(numBySexo)
 	    .legend(dc.legend())
 	    .on("filtered", function (){
-			updateRecords(apellidoDim);			
+			updateRecords(idDim);			
 		});
 
 	mapChart.width(1000)
 	    .height(330)
-	    .dimension(provinciaDim)
-	    .group(numByProvincia)
-	   	.colors(d3.scale.quantize().range(["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF", "#1E96FF", "#0089FF", "#0061B5"]))
-        .colorDomain([0, maxProvincia])
+	    .dimension(concejoDim)
+	    .group(numByConcejo)
+	   	//.colors(d3.scale.quantize().range(["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF", "#1E96FF", "#0089FF", "#0061B5"]))
+        .colors(["#E2F2FF", "#618FAF", "#5586A7", "#4A7DA0", "#3E7499", "#326B92", "#27628A", "#1B5983", "#0F507C", "#044775"])
+        .colorDomain([0, maxConcejo])        
 	    .overlayGeoJson(galiciaJson["features"], "NaturalProvincia", function (d) {
-	        return d.properties["name_2"];
+	        return d.properties["name_4"];
 	    })
+	     .colorAccessor(function(d) { 
+	     	if (d === undefined){
+	     		return 0;
+	     	}
+            return d;
+        })
 	    
 	    .projection(projection)
 	    .title(function (p) {
-	        return "NaturalProvincia: " + p["key"]
+	    	if (p["value"] === undefined){
+	    		p["value"] = "Sin datos";
+	    	}
+	        return p["key"] + ": "+ p["value"]
 	                + "\n"
       	
 	    })
 		.on("filtered", function (){
-			updateRecords(apellidoDim);			
+			updateRecords(idDim);			
 		})
 	    
     dc.renderAll();

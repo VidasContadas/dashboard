@@ -1,5 +1,5 @@
 queue()
-    .defer(d3.json, STATIC_URL+"panel/data/data_3000.json")
+    .defer(d3.json, STATIC_URL+"panel/data/data.json")
     .defer(d3.json, STATIC_URL+"panel/geojson/galicia.json")
     .await(makeGraphs);
 
@@ -22,24 +22,24 @@ var maxConcejo = 0;
 
 $(document).ready(function(){
 
-	
-	$("body").on('click', '.list-person', function(){		
-		
+
+	$("body").on('click', '.list-person', function(){
+
 		if($(this).hasClass("active")){
 			//Deselect person
 			personaActiva = -1;
 			idDim.filterAll();
-		} else{			
+		} else{
 			//Select person
 			var id =  $(this).attr("data-id");
-			personaActiva = id;		
+			personaActiva = id;
 			idDim.filterFunction(function(d){
-				if (d == id){					
+				if (d == id){
 					return d;
 				}
-			});			
+			});
 
-			
+
 		}
 		numByEdad.reduceCount();
 		numBySuceso.reduceCount();
@@ -47,15 +47,14 @@ $(document).ready(function(){
 		numByConcejo.reduceCount();
 
 		updateRecords(idDim);
-		
+
 		dc.redrawAll();
-		
+
 	});
 
 
 
 });
-
 
 
 function updateRecords(dim){
@@ -64,10 +63,9 @@ function updateRecords(dim){
 
 	maxConcejo = concejoDim.group().top(1)[0].value;
 	if (mapChart !== undefined){
-		mapChart.colorDomain([0, maxConcejo]);
-	console.log("max concejo:" +maxConcejo);
+        mapChart.colorDomain([0, maxConcejo]);
+        console.log("max concejo:" +maxConcejo);
 	}
-	
 
 	dc.redrawAll();
 
@@ -82,7 +80,7 @@ function updateRecords(dim){
 		var personCode = personCode.replace("##surname##", allRecords[i].Apelidos);
 		var personCode = personCode.replace("##alias##", allRecords[i].Apodo);
 		var personCode = personCode.replace("##id##", allRecords[i].id);
-		var newRow = $(personCode);		
+		var newRow = $(personCode);
 		if (allRecords[i].id == personaActiva){
 			$(newRow).addClass("active");
 		}
@@ -95,12 +93,16 @@ function updateRecords(dim){
 function cleanData(datos){
 	//Clean data
 	for (var i = 0; i < datos.length; i++){
+
 		d = datos[i];
 
 		d['id'] = i+1; //add id to every entry. +1 because starting with 0 made the first one not to work.
 
 		d['Sexo'].trim();
 
+        if( d['Apelidos'] == "Romero Menaya"){
+            console.log("Romero Menaya");
+        }
 		switch (d['Sexo']){
 			case ('Home' || 'Hombre'):
 				d['Sexo'] = "Hombre";
@@ -112,8 +114,9 @@ function cleanData(datos){
 
 			default:
 				console.log("Posible fallo de datos (Sexo), se eliminará esta entrada:");
-				console.log(d);
+                console.log(d);
 				datos.splice(i,1);
+
 				break;
 		}
 
@@ -133,46 +136,65 @@ function cleanData(datos){
 				break;
 		}
 
-		d['Apelidos'] = toTitleCase(d['Apelidos']);
+	d['Apelidos'] = toTitleCase(d['Apelidos']);
+    d['NaturalConcello'] = d['Natural Concello'];
+
 	}
+
 
 	return datos;
 
 }
 
 function makeGraphs(error, datos, galiciaJson) {
-	
+
 	console.log( Object.keys(datos[0]));
 	var twentysixers = 0;
-	
+
 	datos = cleanData(datos);
+
+    for (var i = 0; i < datos.length; i++){
+        if (d["id"] === undefined ){
+            console.log("ID UNDEFINED!");
+        }
+    }
 
 	//Create a Crossfilter instance
 	ndx = crossfilter(datos);
 
 
 	//Define Dimensions
-	
-	var sexoDim = ndx.dimension(function(d) { 
+
+	var sexoDim = ndx.dimension(function(d) {
 		if (d["Sexo"] == "Home"){
 			d["Sexo"] = "Hombre";
 		}
-		return d["Sexo"];
+		return d["Sexo"] ? d["Sexo"] : "";
 	});
 
 
-	var sucesoDim = ndx.dimension(function(d) { 
-		return d["Suceso"];
+	var sucesoDim = ndx.dimension(function(d) {
+		return d["Suceso"] ? d["Suceso"] : "";
 	});
-	
-	var edadDim = ndx.dimension(function(d) { 
+
+	var edadDim = ndx.dimension(function(d) {
 		//if (d["Idade"] != 0){
-			return d["Idade"];
+		return d["Idade"] ? d["Idade"] : 0;
 		//}
 	});
 
-	idDim = ndx.dimension(function(d){ return d["id"]});
-	concejoDim = ndx.dimension(function(d){ return d["NaturalConcello"]});
+	idDim = ndx.dimension(function(d){
+        if (d["id"] !== undefined ){
+            return d["id"];
+        }
+         console.log("---- ID ERROR ---");
+         console.log(d);
+         return 0;
+      });
+
+	concejoDim = ndx.dimension(function(d){
+        return d["NaturalConcello"] ? d["NaturalConcello"] : 0;
+      });
 
 
 
@@ -217,7 +239,7 @@ function makeGraphs(error, datos, galiciaJson) {
   					.center([0, 42])
   					.scale(10000)
   					.translate([1125,300]);
-   		
+
 	edadBarChart
 		.width(1000)
 		.height(160)
@@ -226,25 +248,25 @@ function makeGraphs(error, datos, galiciaJson) {
 		.group(numByEdad)
 		.transitionDuration(500)
 		.x(d3.scale.linear().domain([minEdad,maxEdad]))
-		.elasticY(true)		
-		.renderLabel(true)	
+		.elasticY(true)
+		.renderLabel(true)
 		.xAxisLabel("Year")
 		.on("filtered", function (){
-			updateRecords(idDim);			
+			updateRecords(idDim);
 		})
-		.yAxis().ticks(4);	
+		.yAxis().ticks(4);
 
 	sucesosRowChart
         .width(500)
         .height(250)
         .dimension(sucesoDim)
-        .group(numBySuceso)    
+        .group(numBySuceso)
         .ordering(function(d){ return d.calls;})
         .cap(7)
-        .elasticX(true)	
+        .elasticX(true)
         .othersGrouper(false) //Removes "Other" from the list
         .on("filtered", function (){
-			updateRecords(idDim);			
+			updateRecords(idDim);
 		})
         .xAxis().ticks(4);
 
@@ -257,7 +279,7 @@ function makeGraphs(error, datos, galiciaJson) {
 	    .group(numBySexo)
 	    .legend(dc.legend())
 	    .on("filtered", function (){
-			updateRecords(idDim);			
+			updateRecords(idDim);
 		});
 
 	mapChart.width(1000)
@@ -266,17 +288,17 @@ function makeGraphs(error, datos, galiciaJson) {
 	    .group(numByConcejo)
 	   	//.colors(d3.scale.quantize().range(["#E2F2FF", "#C4E4FF", "#9ED2FF", "#81C5FF", "#6BBAFF", "#51AEFF", "#36A2FF", "#1E96FF", "#0089FF", "#0061B5"]))
         .colors(["#E2F2FF", "#618FAF", "#5586A7", "#4A7DA0", "#3E7499", "#326B92", "#27628A", "#1B5983", "#0F507C", "#044775"])
-        .colorDomain([0, maxConcejo])        
+        .colorDomain([0, maxConcejo])
 	    .overlayGeoJson(galiciaJson["features"], "NaturalProvincia", function (d) {
 	        return d.properties["name_4"];
 	    })
-	     .colorAccessor(function(d) { 
+	     .colorAccessor(function(d) {
 	     	if (d === undefined){
 	     		return 0;
 	     	}
             return d;
         })
-	    
+
 	    .projection(projection)
 	    .title(function (p) {
 	    	if (p["value"] === undefined){
@@ -284,12 +306,12 @@ function makeGraphs(error, datos, galiciaJson) {
 	    	}
 	        return p["key"] + ": "+ p["value"]
 	                + "\n"
-      	
+
 	    })
 		.on("filtered", function (){
-			updateRecords(idDim);			
+			updateRecords(idDim);
 		})
-	    
+
     dc.renderAll();
 
 };
